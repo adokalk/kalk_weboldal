@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="hu" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adókalkulátor</title>
+    <!-- Tailwind CDN – forms plugin; dark‑mode automatikus (OS) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "media",
+      };
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-4 transition-colors duration-300">
+    <div class="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-2xl shadow p-6 space-y-6">
+      <h1 class="text-2xl font-bold text-center mb-2">Mennyi pénzt fizetsz az államnak?</h1>
+
+      <!-- űrlap -->
+      <form id="taxForm" class="space-y-4" aria-label="Adókalkulátor űrlap">
+        <div>
+          <label class="block font-medium" for="gross">Bruttó havi bér (Ft)</label>
+          <input id="gross" type="number" required class="w-full border rounded-lg p-2 bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
+        </div>
+        <div>
+          <label class="block font-medium" for="children">Gyermekek száma</label>
+          <input id="children" type="number" value="0" min="0" class="w-full border rounded-lg p-2 bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
+        </div>
+
+        <!-- kedvezmény jelölők info‑gombokkal -->
+        <fieldset class="flex flex-wrap gap-4" aria-labelledby="kedvezmenyekLegend">
+          <legend id="kedvezmenyekLegend" class="sr-only">Kedvezmények</legend>
+
+          <label class="flex items-center">
+            <input id="under25" type="checkbox" class="mr-2" />25 év alatti
+            <button type="button" data-info="25 év alattiak teljes SZJA‑mentessége." class="ml-1 text-blue-500 hover:underline text-sm font-bold">i</button>
+          </label>
+
+          <label class="flex items-center">
+            <input id="under30mother" type="checkbox" class="mr-2" />30 év alatti anya
+            <button type="button" data-info="30 év alatti anyák adóalap‑csökkentése évi 7,88 M Ft-ig (2025)." class="ml-1 text-blue-500 hover:underline text-sm font-bold">i</button>
+          </label>
+
+          <label class="flex items-center">
+            <input id="mother4plus" type="checkbox" class="mr-2" />4+ gyermekes anya
+            <button type="button" data-info="Négy vagy többgyermekes anyák teljes SZJA‑mentessége." class="ml-1 text-blue-500 hover:underline text-sm font-bold">i</button>
+          </label>
+
+          <label class="flex items-center">
+            <input id="firstMarriage" type="checkbox" class="mr-2" />Első házas
+            <button type="button" data-info="Első házasság esetén 24 hó‑ig havi 10 000 Ft adóalap‑kedvezmény." class="ml-1 text-blue-500 hover:underline text-sm font-bold">i</button>
+          </label>
+
+          <label class="flex items-center">
+            <input id="personalAllowance" type="checkbox" class="mr-2" />Személyi kedv.
+            <button type="button" data-info="Súlyos fogyatékosság esetén havi 49 000 Ft adóalap‑kedvezmény (2025)." class="ml-1 text-blue-500 hover:underline text-sm font-bold">i</button>
+          </label>
+        </fieldset>
+
+        <div>
+          <label class="block font-medium" for="spending">Havi nettó költés (Ft)</label>
+          <input id="spending" type="number" placeholder="Ha üres, a teljes nettó bér kerül költésre" class="w-full border rounded-lg p-2 bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
+        </div>
+
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-xl focus:outline-none focus:ring focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-slate-800">Számol</button>
+      </form>
+
+      <!-- eredmények -->
+      <div id="result" class="hidden opacity-0 space-y-4 transition-opacity duration-700 ease-out">
+        <h2 class="text-xl font-semibold">Eredmény</h2>
+        <div class="grid grid-cols-2 gap-2 text-lg">
+          <p class="col-span-2"><strong>Nettó bér:</strong> <span id="netto">-</span> Ft</p>
+          <p><strong>Te (SZJA+TB):</strong><br /><span id="youPay">-</span> Ft</p>
+          <p><strong>Munkaadód (Szocho):</strong><br /><span id="employerPay">-</span> Ft</p>
+          <p class="col-span-2"><strong>ÁFA:</strong> <span id="vatPay">-</span> Ft</p>
+        </div>
+        <p class="border-t border-gray-300 dark:border-gray-700 pt-2 text-lg"><strong>Összesen havonta:</strong> <span id="totalState">-</span> Ft</p>
+
+        <canvas id="pie" class="mx-auto"></canvas>
+
+        <!-- Éves összesítés -->
+        <div id="yearSummary" class="pt-4">
+          <h3 class="text-lg font-semibold mb-2">Éves összesítés</h3>
+          <ul class="space-y-1">
+            <li><strong>Nettó bér:</strong> <span id="nettoYear">-</span> Ft</li>
+            <li><strong>Te (SZJA+TB):</strong> <span id="youPayYear">-</span> Ft</li>
+            <li><strong>Munkaadód:</strong> <span id="employerPayYear">-</span> Ft</li>
+            <li><strong>ÁFA:</strong> <span id="vatPayYear">-</span> Ft</li>
+            <li class="border-t border-gray-300 dark:border-gray-700 pt-1"><strong>Összesen évente:</strong> <span id="totalStateYear">-</span> Ft</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
