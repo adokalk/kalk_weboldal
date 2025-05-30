@@ -1,0 +1,25 @@
+{
+  "year": 2025,
+  "rates": {
+    "szja": 0.15,
+    "tb": 0.185,
+    "szocho": 0.13,
+    "afa_standard": 0.27
+  },
+  "deductions": {
+    "young_under25": { "type": "full_szja_exemption" },
+    "young_mothers_under30": {
+      "type": "annual_max_base",
+      "max_base_huf": 7881420
+    },
+    "mothers_4plus": { "type": "full_szja_exemption" },
+    "family_allowance": {
+      "thresholds": {
+        "before_2025_07_01": [10000, 20000, 33000],
+        "from_2025_07_01":   [15000, 60000, 49500]
+      }
+    },
+    "first_marriage": { "monthly_huf": 10000, "months": 24 },
+    "personal_allowance": { "monthly_huf": 49000 }
+  }
+}
