@@ -1,4 +1,5 @@
-/* tax calculator logic – yearly summary, animations, and inline tooltips */
+/* tax calculator logic – yearly summary, animations, and inline tooltips
+   v2: responsive tooltips – automatikus oldalra igazítás mobilon */
 
 document.addEventListener("DOMContentLoaded", async () => {
   // --------- Config & helpers ---------
@@ -16,16 +17,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     const startTime = performance.now();
     const step = (now) => {
       const progress = Math.min(1, (now - startTime) / duration);
-      const val = end * progress;
-      el.textContent = nf.format(Math.round(val));
+      el.textContent = nf.format(Math.round(end * progress));
       if (progress < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   };
 
-  // --------- Tooltip logic for info buttons ---------
+  // --------- Tooltip logic ---------
+  const positionTip = (btn, tip) => {
+    // Reset classes
+    tip.classList.remove("left-full", "ml-2", "right-full", "mr-2");
+
+    const btnRect = btn.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    const spaceRight = window.innerWidth - (btnRect.right + tipRect.width + 8);
+
+    if (spaceRight < 0) {
+      // ragasszuk bal oldalra
+      tip.classList.add("right-full", "mr-2");
+    } else {
+      // alap: balról jobbra (az ikon után)
+      tip.classList.add("left-full", "ml-2");
+    }
+  };
+
   document.querySelectorAll("[data-info]").forEach((btn) => {
-    // make the button a blue circle with "i"
+    // stílus a gombnak
     btn.classList.add(
       "inline-flex",
       "items-center",
@@ -43,24 +60,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       "focus:outline-none"
     );
 
-    // create tooltip element
+    // létrehozott tooltip
     const tip = document.createElement("div");
     tip.textContent = btn.dataset.info;
     tip.className =
-      "absolute z-10 left-full ml-2 top-1/2 -translate-y-1/2 bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-xs p-2 rounded shadow w-52 hidden";
+      "absolute z-10 top-1/2 -translate-y-1/2 bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-xs p-2 rounded shadow max-w-xs w-44 break-words hidden";
 
-    const wrapper = btn.parentElement; // <label>
+    const wrapper = btn.parentElement; // label
     wrapper.classList.add("relative");
     wrapper.appendChild(tip);
 
-    // toggle tooltip
+    // toggle + pozicionálás
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      tip.classList.toggle("hidden");
+      const isHidden = tip.classList.toggle("hidden");
+      if (!isHidden) {
+        positionTip(btn, tip);
+      }
+    });
+
+    // Re‑position on window resize (ha nyitva van)
+    window.addEventListener("resize", () => {
+      if (!tip.classList.contains("hidden")) positionTip(btn, tip);
     });
   });
 
-  // hide any open tooltip when clicking elsewhere
+  // Globális kattintás esetén tooltipek bezárása
   document.addEventListener("click", () => {
     document.querySelectorAll("[data-info]").forEach((btn) => {
       const tip = btn.parentElement.querySelector("div");
@@ -68,7 +93,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // --------- Main calc logic ---------
+  // --------- Kalkulátor ---------
   const form = $("taxForm");
   const resultBox = $("result");
   let chartInstance = null;
@@ -76,7 +101,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-    // Inputs
+    // --- Inputok ---
     const gross = parseFloat($("gross").value) || 0;
     const children = Math.max(0, parseInt($("children").value || 0, 10));
     const under25 = $("under25").checked;
@@ -86,12 +111,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const personalAllowance = $("personalAllowance").checked;
     const spendingInput = parseFloat($("spending").value);
 
-    // Rates
+    // --- Kulcsok ---
     const { szja, tb, szocho, afa_standard } = rates.rates;
     let szjaBase = gross;
     let szjaDue = 0;
 
-    // Kedvezmények – NAV sorrend
+    // Kedvezmények
     if (mother4plus) {
       szjaBase = 0;
     } else if (under25) {
@@ -102,19 +127,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         szjaBase -= Math.min(maxMonthly, szjaBase);
       }
       if (personalAllowance) {
-        const pa = rates.deductions.personal_allowance.monthly_huf;
-        szjaBase -= Math.min(pa, szjaBase);
+        szjaBase -= Math.min(rates.deductions.personal_allowance.monthly_huf, szjaBase);
       }
       if (firstMarriage) {
-        const fm = rates.deductions.first_marriage.monthly_huf;
-        szjaBase -= Math.min(fm, szjaBase);
+        szjaBase -= Math.min(rates.deductions.first_marriage.monthly_huf, szjaBase);
       }
       if (children > 0) {
         const now = new Date();
-        const key =
-          now.getFullYear() === 2025 && now.getMonth() >= 6
-            ? "from_2025_07_01"
-            : "before_2025_07_01";
+        const key = now.getFullYear() === 2025 && now.getMonth() >= 6 ? "from_2025_07_01" : "before_2025_07_01";
         const arr = rates.deductions.family_allowance.thresholds[key];
         const idx = Math.min(children, 3) - 1;
         const fa = idx >= 0 ? (children >= 3 ? arr[2] * children : arr[idx]) : 0;
@@ -123,26 +143,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       szjaDue = szjaBase * szja;
     }
 
-    // Járulékok & nettó
     const tbDue = gross * tb;
     const employerDue = gross * szocho;
     const netto = gross - szjaDue - tbDue;
 
-    // Költés → ÁFA
     const spending = isNaN(spendingInput) ? netto : spendingInput;
     const vatDue = spending * (afa_standard / (1 + afa_standard));
 
-    // Összesen
     const totalState = szjaDue + tbDue + employerDue + vatDue;
 
-    // Éves értékek
+    // Éves
     const nettoY = netto * 12;
     const youY = (szjaDue + tbDue) * 12;
     const empY = employerDue * 12;
     const vatY = vatDue * 12;
     const totalY = totalState * 12;
 
-    // Kirajzolás + animáció
+    // Kiírás
     [
       ["netto", netto],
       ["youPay", szjaDue + tbDue],
@@ -156,29 +173,21 @@ document.addEventListener("DOMContentLoaded", async () => {
       ["totalStateYear", totalY],
     ].forEach(([id, val]) => animateValue($(id), val));
 
-    // Fade‑in panel
     if (resultBox.classList.contains("hidden")) {
       resultBox.classList.remove("hidden");
       setTimeout(() => resultBox.classList.remove("opacity-0"), 50);
     }
 
-    // Pie chart
+    // Diagram
     if (chartInstance) chartInstance.destroy();
-    const ctx = $("pie");
-    chartInstance = new Chart(ctx, {
+    chartInstance = new Chart($("pie"), {
       type: "pie",
       data: {
         labels: ["Te (SZJA+TB)", "Munkaadó (Szocho)", "ÁFA"],
-        datasets: [
-          {
-            data: [szjaDue + tbDue, employerDue, vatDue],
-          },
-        ],
+        datasets: [{ data: [szjaDue + tbDue, employerDue, vatDue] }],
       },
       options: {
-        animation: prefersReduce
-          ? false
-          : { animateRotate: true, animateScale: false, duration: 700 },
+        animation: prefersReduce ? false : { animateRotate: true, duration: 700 },
         plugins: { legend: { position: "bottom" } },
       },
     });
