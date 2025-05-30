@@ -1,5 +1,6 @@
-/* tax calculator logic – yearly summary, animations, and inline tooltips
-   v2: responsive tooltips – automatikus oldalra igazítás mobilon */
+/* tax calculator logic – v3
+   • Éves összesítés, animációk (megmarad)
+   • Tooltip most mindig bent marad a viewporton (jobb, bal vagy alul) */
 
 document.addEventListener("DOMContentLoaded", async () => {
   // --------- Config & helpers ---------
@@ -8,7 +9,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const nf = new Intl.NumberFormat("hu-HU");
   const $ = (id) => document.getElementById(id);
 
-  // Smooth counting animation
   const animateValue = (el, end, duration = 800) => {
     if (prefersReduce) {
       el.textContent = nf.format(Math.round(end));
@@ -16,33 +16,53 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     const startTime = performance.now();
     const step = (now) => {
-      const progress = Math.min(1, (now - startTime) / duration);
-      el.textContent = nf.format(Math.round(end * progress));
-      if (progress < 1) requestAnimationFrame(step);
+      const p = Math.min(1, (now - startTime) / duration);
+      el.textContent = nf.format(Math.round(end * p));
+      if (p < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   };
 
   // --------- Tooltip logic ---------
+  const baseTipClass =
+    "absolute z-10 bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-xs p-2 rounded shadow max-w-xs w-44 break-words";
+
   const positionTip = (btn, tip) => {
-    // Reset classes
-    tip.classList.remove("left-full", "ml-2", "right-full", "mr-2");
+    // távolítsunk el korábbi pozícióosztályokat
+    tip.classList.remove(
+      "left-full",
+      "right-full",
+      "top-full",
+      "-translate-y-1/2",
+      "-translate-x-1/2",
+      "ml-2",
+      "mr-2",
+      "mt-2",
+      "top-1/2",
+      "left-1/2"
+    );
+    tip.style.left = "";
+    tip.style.top = "";
 
+    // alapból jobbra próbálkozunk
     const btnRect = btn.getBoundingClientRect();
-    const tipRect = tip.getBoundingClientRect();
-    const spaceRight = window.innerWidth - (btnRect.right + tipRect.width + 8);
 
-    if (spaceRight < 0) {
-      // ragasszuk bal oldalra
-      tip.classList.add("right-full", "mr-2");
-    } else {
-      // alap: balról jobbra (az ikon után)
-      tip.classList.add("left-full", "ml-2");
+    // Először jobbra
+    if (btnRect.right + 8 + tip.offsetWidth <= window.innerWidth) {
+      tip.classList.add("left-full", "ml-2", "top-1/2", "-translate-y-1/2");
+      return;
     }
+    // Aztán balra
+    if (btnRect.left - 8 - tip.offsetWidth >= 0) {
+      tip.classList.add("right-full", "mr-2", "top-1/2", "-translate-y-1/2");
+      return;
+    }
+    // Végül alul középre – mindig elfér
+    tip.classList.add("top-full", "mt-2", "left-1/2", "-translate-x-1/2");
   };
 
   document.querySelectorAll("[data-info]").forEach((btn) => {
-    // stílus a gombnak
+    // ikon kinézet
     btn.classList.add(
       "inline-flex",
       "items-center",
@@ -60,36 +80,29 @@ document.addEventListener("DOMContentLoaded", async () => {
       "focus:outline-none"
     );
 
-    // létrehozott tooltip
     const tip = document.createElement("div");
     tip.textContent = btn.dataset.info;
-    tip.className =
-      "absolute z-10 top-1/2 -translate-y-1/2 bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-xs p-2 rounded shadow max-w-xs w-44 break-words hidden";
+    tip.className = baseTipClass + " hidden";
 
-    const wrapper = btn.parentElement; // label
-    wrapper.classList.add("relative");
-    wrapper.appendChild(tip);
+    btn.parentElement.classList.add("relative");
+    btn.parentElement.appendChild(tip);
 
-    // toggle + pozicionálás
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const isHidden = tip.classList.toggle("hidden");
-      if (!isHidden) {
-        positionTip(btn, tip);
-      }
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const hidden = tip.classList.toggle("hidden");
+      if (!hidden) positionTip(btn, tip);
     });
 
-    // Re‑position on window resize (ha nyitva van)
     window.addEventListener("resize", () => {
       if (!tip.classList.contains("hidden")) positionTip(btn, tip);
     });
   });
 
-  // Globális kattintás esetén tooltipek bezárása
+  // zárjunk minden tooltipet globális kattintásra
   document.addEventListener("click", () => {
-    document.querySelectorAll("[data-info]").forEach((btn) => {
-      const tip = btn.parentElement.querySelector("div");
-      if (tip && !tip.classList.contains("hidden")) tip.classList.add("hidden");
+    document.querySelectorAll("[data-info]").forEach((b) => {
+      const t = b.parentElement.querySelector("div");
+      if (t && !t.classList.contains("hidden")) t.classList.add("hidden");
     });
   });
 
@@ -101,7 +114,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-    // --- Inputok ---
     const gross = parseFloat($("gross").value) || 0;
     const children = Math.max(0, parseInt($("children").value || 0, 10));
     const under25 = $("under25").checked;
@@ -111,20 +123,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     const personalAllowance = $("personalAllowance").checked;
     const spendingInput = parseFloat($("spending").value);
 
-    // --- Kulcsok ---
     const { szja, tb, szocho, afa_standard } = rates.rates;
     let szjaBase = gross;
     let szjaDue = 0;
 
-    // Kedvezmények
     if (mother4plus) {
       szjaBase = 0;
     } else if (under25) {
       szjaBase = 0;
     } else {
       if (under30Mother) {
-        const maxMonthly = rates.deductions.young_mothers_under30.max_base_huf / 12;
-        szjaBase -= Math.min(maxMonthly, szjaBase);
+        szjaBase -= Math.min(rates.deductions.young_mothers_under30.max_base_huf / 12, szjaBase);
       }
       if (personalAllowance) {
         szjaBase -= Math.min(rates.deductions.personal_allowance.monthly_huf, szjaBase);
@@ -146,31 +155,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tbDue = gross * tb;
     const employerDue = gross * szocho;
     const netto = gross - szjaDue - tbDue;
-
     const spending = isNaN(spendingInput) ? netto : spendingInput;
     const vatDue = spending * (afa_standard / (1 + afa_standard));
-
     const totalState = szjaDue + tbDue + employerDue + vatDue;
 
-    // Éves
-    const nettoY = netto * 12;
-    const youY = (szjaDue + tbDue) * 12;
-    const empY = employerDue * 12;
-    const vatY = vatDue * 12;
-    const totalY = totalState * 12;
+    const yearly = (x) => x * 12;
 
-    // Kiírás
     [
       ["netto", netto],
       ["youPay", szjaDue + tbDue],
       ["employerPay", employerDue],
       ["vatPay", vatDue],
       ["totalState", totalState],
-      ["nettoYear", nettoY],
-      ["youPayYear", youY],
-      ["employerPayYear", empY],
-      ["vatPayYear", vatY],
-      ["totalStateYear", totalY],
+      ["nettoYear", yearly(netto)],
+      ["youPayYear", yearly(szjaDue + tbDue)],
+      ["employerPayYear", yearly(employerDue)],
+      ["vatPayYear", yearly(vatDue)],
+      ["totalStateYear", yearly(totalState)],
     ].forEach(([id, val]) => animateValue($(id), val));
 
     if (resultBox.classList.contains("hidden")) {
@@ -178,7 +179,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       setTimeout(() => resultBox.classList.remove("opacity-0"), 50);
     }
 
-    // Diagram
     if (chartInstance) chartInstance.destroy();
     chartInstance = new Chart($("pie"), {
       type: "pie",
